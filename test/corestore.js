@@ -2,15 +2,11 @@ const test = require('tape')
 const crypto = require('hypercore-crypto')
 const hyperswarm = require('hyperswarm')
 const ram = require('random-access-memory')
-const Corestore = require('corestore')
-const dht = require('@hyperswarm/dht')
-const SwarmNetworker = require('corestore-swarm-networking')
 
-const Muxer = require('../corestore')
+const { create, cleanup, BOOTSTRAP_PORT } = require('./lib/networker')
+
+const MultifeedNetworker = require('../networker')
 const multifeed = require('..')
-
-const BOOTSTRAP_PORT = 3100
-var bootstrap = null
 
 const KEY_A = Buffer.alloc(32, 1)
 const KEY_B = Buffer.alloc(32, 2)
@@ -31,23 +27,23 @@ test('corestore networker example', async function (t) {
   t.same(data, Buffer.from('hello'))
 
   // For each networker, setup the mulitfeed mux wrapper.
-  const muxer1 = new Muxer(networker1)
-  const muxer2 = new Muxer(networker2)
+  const muxer1 = new MultifeedNetworker(networker1)
+  const muxer2 = new MultifeedNetworker(networker2)
 
   // For each mux wrapper, join on two different multifeed rootkeys.
-  const mux1a = muxer1.join(KEY_A, { live: true, name: 'm1a' })
-  const mux1b = muxer1.join(KEY_B, { live: true, name: 'm1b' })
+  const mux1a = muxer1.join(KEY_A, { name: 'm1a' })
+  const mux1b = muxer1.join(KEY_B, { name: 'm1b' })
 
-  const mux2a = muxer2.join(KEY_A, { live: true, name: 'mux2a' })
-  const mux2b = muxer2.join(KEY_B, { live: true, name: 'mux2b' })
+  const mux2a = muxer2.join(KEY_A, { name: 'mux2a' })
+  const mux2b = muxer2.join(KEY_B, { name: 'mux2b' })
 
   // Person 1 adds the same feed to both multifeeds.
-  mux1a.addFeed(core1.key)
-  mux1b.addFeed(core1.key)
+  mux1a.addFeed(core1)
+  mux1b.addFeed(core1)
 
   // Person2 adds two different feeds to each multifeed.
-  mux2a.addFeed(core2a.key)
-  mux2b.addFeed(core2b.key)
+  mux2a.addFeed(core2a)
+  mux2b.addFeed(core2b)
 
   // Wait for things to sync.
   // TODO: Remove timeout, wait for event instead.
@@ -81,9 +77,9 @@ test('corestore to multifeed over hyperswarm', async t => {
   // setup a corestore muxer
   const { store, networker } = await create()
   const core = store.get()
-  const muxer = new Muxer(networker)
+  const muxer = new MultifeedNetworker(networker)
   const mux = muxer.join(muxkey)
-  mux.addFeed(core.key)
+  mux.addFeed(core)
 
   // setup a multifeed muxer plus network
   const multi = multifeed(ram, { encryptionKey: muxkey })
@@ -142,43 +138,4 @@ function get (core, idx, opts = {}) {
 
 function timeout (ms) {
   return new Promise(resolve => setTimeout(resolve, ms))
-}
-
-async function create (opts = {}) {
-  if (!bootstrap) {
-    bootstrap = dht({
-      bootstrap: false
-    })
-    bootstrap.listen(BOOTSTRAP_PORT)
-    await new Promise(resolve => {
-      return bootstrap.once('listening', resolve)
-    })
-  }
-  const store = new Corestore(ram)
-  await store.ready()
-  const networker = new SwarmNetworker(store, {
-    ...opts,
-    bootstrap: `localhost:${BOOTSTRAP_PORT}`
-  })
-  // logEvents(networker, 'networker')
-  return { store, networker }
-}
-
-async function cleanup (networkers) {
-  for (let networker of networkers) {
-    await networker.close()
-  }
-  if (bootstrap) {
-    await bootstrap.destroy()
-    bootstrap = null
-  }
-}
-
-function logEvents (emitter, name) {
-  const emit = emitter.emit.bind(emitter)
-  emitter.emit = function (event, ...args) {
-    console.log(name, event)
-    if (event === 'replication-error') console.log(args)
-    emit(event, ...args)
-  }
 }

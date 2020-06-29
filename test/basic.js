@@ -132,18 +132,18 @@ test('replicate two multifeeds', function (t) {
   })
 
   function check () {
-    t.equals(m1.feeds().length, 2)
-    t.equals(m2.feeds().length, 2)
+    t.equals(m1.feeds().length, 2, 'm1 feed length ok')
+    t.equals(m2.feeds().length, 2, 'm2 feed length ok')
     m1.feeds()[1].get(0, function (err, data) {
       t.error(err)
-      t.equals(data, 'bar')
+      t.equals(data, 'bar', 'm1 new feed value ok')
     })
     m2.feeds()[1].get(0, function (err, data) {
       t.error(err)
-      t.equals(data, 'foo')
+      t.equals(data, 'foo', 'm2 new feed value ok')
     })
-    t.equals(feedEvents1, 2)
-    t.equals(feedEvents2, 2)
+    t.equals(feedEvents1, 2, 'feedEvents1 ok')
+    t.equals(feedEvents2, 2, 'feedEvents2 ok')
   }
 })
 
@@ -212,8 +212,10 @@ test('get localfeed by name across disk loads', function (t) {
   multi.writer('minuette', function (err, w) {
     t.error(err)
     t.ok(w.key)
+    console.log('now close')
 
     multi.close(function () {
+      console.log('all closed')
       var multi2 = multifeed(storage, { valueEncoding: 'json' })
       multi2.writer('minuette', function (err, w2) {
         t.error(err)
@@ -275,7 +277,7 @@ test('can provide custom encryption key', function (t) {
   var multi = multifeed(ram, { valueEncoding: 'json', encryptionKey: key })
   multi.ready(function () {
     t.same(multi._opts.encryptionKey, key, 'encryption key set')
-    t.same(multi._root.key, key, 'fake key set')
+    t.same(multi._rootKey, key, 'fake key set')
   })
 })
 
@@ -411,11 +413,11 @@ test('can replicate with custom keypairs', function (t) {
     t.equals(m2.feeds().length, 2)
     m1.feeds()[1].get(0, function (err, data) {
       t.error(err)
-      t.equals(data, 'foo')
+      t.equals(data, 'bar')
     })
     m2.feeds()[1].get(0, function (err, data) {
       t.error(err)
-      t.equals(data, 'bar')
+      t.equals(data, 'foo')
     })
   }
 })

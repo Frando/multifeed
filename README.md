@@ -1,4 +1,24 @@
-# multifeed
+# @frando/corestore-multifeed
+
+Run the [https://github.com/kappa-db/multifeed](multifeed) model of managing hypercores on top of [corestore](https://github.com/andrewosh/corestore) and [corestore-swarm-networking](https://github.com/andrewosh/corestore-swarm-networking).
+
+No docs yet - see [test/new-basic.js](test/new-basic.js) for an example.
+
+The main export (`new Multifeed(storage, opts)`) is API compatible to the current multifeed as documented below. `storage` can also be a corestore (otherwise one is created with `storage`). Then connect it to a corestore swarm networker to apply multifeed replication.
+
+```javascript
+const corestore = new Corestore(ram)
+const networker = new CorstoreSwarmNetworker(corestore)
+const multifeedNetworker = new MultifeedNetworker(networker)
+
+const key = hcrypto.keyPair().publicKey
+const multi1 = new Multifeed(corestore, { key })
+multfeedNetworker.swarm(multi1)
+
+// use as multifeed as documented below
+// you can add as many multifeeds as you want to a single networker instance
+
+---
 
 > multi-writer hypercore
 
