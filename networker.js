@@ -46,25 +46,26 @@ class MuxerTopic extends EventEmitter {
 
     function onreplicate (keys, repl) {
       let pending = keys.length
-      let feeds = []
-      next()
 
-      function next () {
-        var key = keys[pending-1]
-        --pending
-        if (!key) return done()
-        if (self._feeds.has(key)) return done()
+      for (const key of keys) {
+        if (self._feeds.has(key)) {
+          done()
+          continue
+        }
 
         self.getFeed(key, (err, feed) => {
           if (err) return done(err)
-          self.emit('feed', feed)
           self.addFeed(feed)
-          next()
+          self.emit('feed', feed)
+          done()
         })
       }
 
       function done () {
-        if (!pending) repl(keys.map(key => self._feeds.get(key)))
+        if (!--pending) {
+          const feeds = keys.map(key => self._feeds.get(key))
+          repl(feeds)
+        }
       }
     }
 
