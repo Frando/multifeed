@@ -4,13 +4,15 @@ const debug = require('debug')('multifeed')
 const { EventEmitter } = require('events')
 
 class MuxerTopic extends EventEmitter {
-  constructor (rootKey, corestore, opts = {}) {
+  constructor (corestore, rootKey, opts = {}) {
     super()
+    this._id = crypto.randomBytes(2).toString('hex')
+    this.corestore = corestore
     this.rootKey = rootKey
-    this._corestore = corestore
     this._feeds = new Map()
     this._streams = new Map()
     this._opts = opts
+    this.getFeed = opts.getFeed || this._getFeed.bind(this)
   }
 
   // Add a stream to the multiplexer.
@@ -43,17 +45,27 @@ class MuxerTopic extends EventEmitter {
     }
 
     function onreplicate (keys, repl) {
-      for (const key of keys) {
-        if (self._feeds.has(key)) continue
-        // TODO: This is the only place where we ever access the corestore directly
-        // from the networking code. Move to callback option with the following line
-        // as default option.
-        const feed = self._corestore.get({ key })
-        self.addFeed(feed)
-        self.emit('feed', feed)
+      let pending = keys.length
+      let feeds = []
+      next()
+
+      function next () {
+        var key = keys[pending-1]
+        --pending
+        if (!key) return done()
+        if (self._feeds.has(key)) return done()
+
+        self.getFeed(key, (err, feed) => {
+          if (err) return done(err)
+          self.emit('feed', feed)
+          self.addFeed(feed)
+          next()
+        })
       }
-      const feeds = keys.map(key => self._feeds.get(key))
-      repl(feeds)
+
+      function done () {
+        if (!pending) repl(keys.map(key => self._feeds.get(key)))
+      }
     }
 
     function cleanup (_err) {
@@ -71,6 +83,12 @@ class MuxerTopic extends EventEmitter {
 
   feeds () {
     return Array.from(this._feeds.values())
+  }
+
+  _getFeed (key, cb) {
+    var feed = this.corestore.get({ key })
+    if (!feed) return cb(new Error('no feed matching that key'))
+    cb(null, feed)
   }
 
   addFeed (feed) {
@@ -127,18 +145,31 @@ module.exports = class MultifeedNetworker {
     if (!Buffer.isBuffer(rootKey)) rootKey = Buffer.from(rootKey, 'hex')
     const hkey = rootKey.toString('hex')
     if (this.muxers.has(hkey)) return this.muxers.get(hkey)
-
-    const mux = opts.mux || new MuxerTopic(rootKey, this.corestore, opts)
-
+    const mux = opts.mux || new MuxerTopic(this.corestore, rootKey, opts)
     const discoveryKey = crypto.discoveryKey(rootKey)
     // Join the swarm.
-    this.networker.join(discoveryKey)
+    this.networker.configure(discoveryKey, { announce: true, lookup: true })
     this.muxers.set(hkey, mux)
     // Add all existing streams to the multiplexer.
     for (const { stream } of this.streamsByKey.values()) {
       mux.addStream(stream)
     }
     return mux
+  }
+
+  leave (rootKey) {
+    if (!Buffer.isBuffer(rootKey)) rootKey = Buffer.from(rootKey, 'hex')
+    const hkey = rootKey.toString('hex')
+    var mux = this.muxers.get(hkey)
+    if (!mux) return false // throw??
+    const discoveryKey = crypto.discoveryKey(rootKey)
+    this.networker.configure(discoveryKey, { announce: false, lookup: false })
+    this.muxers.delete(hkey)
+    // remove and close any existing streams from this mux instance
+    for (const { stream } of this.streamsByKey.values()) {
+      mux.removeStream(stream)
+    }
+    return true
   }
 }
 

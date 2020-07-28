@@ -1,36 +1,13 @@
 # @frando/corestore-multifeed
 
-Run the [https://github.com/kappa-db/multifeed](multifeed) model of managing hypercores on top of [corestore](https://github.com/andrewosh/corestore) and [corestore-swarm-networking](https://github.com/andrewosh/corestore-swarm-networking).
+> Fork of [https://github.com/kappa-db/multifeed](multifeed)
 
-No docs yet - see [test/new-basic.js](test/new-basic.js) for an example.
+Multifeed lets you group together a local set of hypercores with
+a remote set of hypercores under a single shared identifier or key.
 
-The main export (`new Multifeed(storage, opts)`) is API compatible to the current multifeed as documented below. `storage` can also be a corestore (otherwise one is created with `storage`). Then connect it to a corestore swarm networker to apply multifeed replication.
-
-```javascript
-const corestore = new Corestore(ram)
-const networker = new CorstoreSwarmNetworker(corestore)
-const multifeedNetworker = new MultifeedNetworker(networker)
-
-const key = hcrypto.keyPair().publicKey
-const multi1 = new Multifeed(corestore, { key })
-multfeedNetworker.swarm(multi1)
-
-// use as multifeed as documented below
-// you can add as many multifeeds as you want to a single networker instance
-```
-
----
-
-> multi-writer hypercore
-
-Multifeed lets you:
-
-1. manage many hypercores, stored together
-2. replicate a local set of hypercores with a remote set of hypercores (union-syle)
-
-It solves the problem of [hypercore](https://github.com/mafintosh/hypercore)
-only allowing one writer by making it easy to manage and sync a set of
-hypercores -- by a variety of authors -- across peers.
+It solves the problem of [Hypercore](https://github.com/mafintosh/hypercore)
+only allowing one writer per hypercore by making it easy to manage and sync
+a collection of hypercores -- by a variety of authors -- across peers.
 
 Replication works by extending the regular hypercore exchange mechanism to
 include a meta-exchange, where peers share information about the feeds they
@@ -38,13 +15,27 @@ have locally, and choose which of the remote feeds they'd like to download in
 exchange. Right now, the replication mechanism defaults to sharing all local
 feeds and downloading all remote feeds.
 
+This fork of multifeed removes storage of hypercores from multifeed,
+instead delegating / passing this on to [corestore](https://github.com/andrewosh/corestore).
+Multifeed now caches each feed using its given public key
+to ensure the correct feeds are shared on replication with remote peers.
+Feeds keys are persisted in an additional local-only hypercore
+(it is not shared during replication), so that a multifeed instance can be easily recomposed
+from our corestore, which holds no knowledge of which core belongs to which multifeed.
+
+Using [corestore-swarm-networking](https://github.com/andrewosh/corestore-swarm-networking)
+and the new multifeed networker, we can apply granular replication logic for
+several multifeeds across a single instance of the [Hyperswarm DHT](https://github.com/hyperswarm/hyperswarm).
+
 ## Usage
 
-```js
-var multifeed = require('multifeed')
+### Simple
+
+```
+var Multifeed = require('multifeed')
 var ram = require('random-access-memory')
 
-var multi = multifeed('./db', { valueEncoding: 'json' })
+var multi = new Multifeed('./db', { valueEncoding: 'json' })
 
 // a multifeed starts off empty
 console.log(multi.feeds().length)             // => 0
@@ -74,12 +65,54 @@ multi.writer('local', function (err, w) {
 })
 
 function replicate (a, b, cb) {
+  let pending = 2
+
   var r = a.replicate()
+
   r.pipe(b.replicate()).pipe(r)
-    .once('end', cb)
     .once('error', cb)
+    .once('remote-feeds', done)
+    .once('remote-feeds', done)
+
+  function done () {
+    if (!--pending) return cb()
+  }
 }
 ```
+
+### Complex
+
+```
+const Corestore = require('corestore')
+const SwarmNetworker = require('corestore-swarm-networking')
+const Multifeed = require('multifeed')
+const Networker = require('multifeed/networker')
+const crypto = require('hypercore-crypto')
+
+// create a new corestore for our hypercores
+const corestore = new Corestore(ram)
+
+// initialize hyperswarm using corestore-swarm-networker and configure for multifeed
+const network = new Networker(new SwarmNetworker(corestore))
+
+// create two separate instances of multifeed for use across a single network swarm
+const multi1 = new Multifeed(corestore, { key: crypto.randomBytes(32) })
+const multi2 = new Multifeed(corestore, { key: crypto.randomBytes(32) })
+
+// start replicating
+network.swarm(multi1)
+network.swarm(multi2)
+
+// create a third instance which shares a key with the first
+const multi3 = new Multifeed(corestore, { key: multi1.key })
+
+// multi1 and multi3 will now replicate feeds
+network.swarm(multi3)
+```
+
+For more information on how to implement replication across multiple multifeeds, see [test/new-basic.js](test/new-basic.js) for an example.
+
+The main export (`new Multifeed(storage, opts)`) is API compatible with the original Multifeed as documented below. `storage` can also be a corestore (otherwise one is created with `storage`). Then connect it to a corestore swarm networker to apply multifeed replication.
 
 ## API
 
@@ -172,14 +205,15 @@ stream errors, two fatal errors specific to multifeed:
 With [npm](https://npmjs.org/) installed, run
 
 ```
-$ npm install multifeed
+$ npm install @frando/corestore-multifeed
 ```
 
 ## See Also
 
-- [multifeed-index](https://github.com/noffle/multifeed-index)
+- [multifeed (original)](https://github.com/kappa-db/multifeed)
+- [multifeed-index](https://github.com/kappa-db/multifeed-index)
 - [hypercore](https://github.com/mafintosh/hypercore)
-- [kappa-core](https://github.com/noffle/kappa-core)
+- [kappa-core](https://github.com/kappa-db/kappa-core)
 
 ## License
 

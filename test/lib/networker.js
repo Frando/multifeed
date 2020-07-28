@@ -1,7 +1,7 @@
 const Corestore = require('corestore')
 const ram = require('random-access-memory')
 const dht = require('@hyperswarm/dht')
-const SwarmNetworker = require('corestore-swarm-networking')
+const Networker = require('corestore-networker')
 const BOOTSTRAP_PORT = 3100
 var bootstrap = null
 
@@ -19,7 +19,7 @@ async function create (opts = {}) {
   }
   const store = new Corestore(ram)
   await store.ready()
-  const networker = new SwarmNetworker(store, {
+  const networker = new Networker(store, {
     ...opts,
     bootstrap: `localhost:${BOOTSTRAP_PORT}`
   })

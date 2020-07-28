@@ -13,14 +13,14 @@
   "bugs": "https://github.com/noffle/multifeed/issues",
   "main": "index.js",
   "scripts": {
-    "test": "tape test/*.js",
+    "test": "tape 'test/new-basic.js'",
     "lint": "standard"
   },
   "keywords": [],
   "dependencies": {
     "abstract-extension": "^3.1.0",
     "corestore": "^5.5.0",
-    "corestore-swarm-networking": "^5.5.1",
+    "corestore-networker": "git+https://github.com/andrewosh/corestore-networker#v1.0.1",
     "debug": "^4.1.0",
     "hypercore": "^9.2.2",
     "hypercore-crypto": "^2.0.0",
